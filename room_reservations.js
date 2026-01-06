@@ -18,18 +18,34 @@ async function readSheet() {
 
   const spreadsheetId = "13CdEbddbIDDHdCVU9IvpHQzSB4lJroJ36Riufl5uvTk";
 
-  const response = await sheets.spreadsheets.values.get({
+  const spreadsheet = await sheets.spreadsheets.get({
     spreadsheetId,
-    range: "Studio (1)!A3:H67",
+    includeGridData: true,
   });
 
-  console.log(response.data.values);
+  const subSheets = spreadsheet.data.sheets.slice(0, -1); // leave off Stats sheet
+
+  const sheetByRoomByTime = {};
+  subSheets.forEach(function (sheet) {
+    const sheetTitle = sheet.properties.title;
+    const rows = sheet.data?.[0]?.rowData || [];
+    let values = rows.map((row) => {
+      const cells = row.values || [];
+      return cells.map((cell) => cell.formattedValue || "");
+    });
+    values = values.slice(3, 67);
+
+    const sheetByTime = {};
+    for (const row of values) {
+      const key = row[0];
+      sheetByTime[key] = row.slice(1);
+    }
+
+    sheetByRoomByTime[sheetTitle] = sheetByTime;
+  });
+
+  return sheetByRoomByTime;
 }
-
-readSheet();
-
-// const timeHeading = document.querySelector("#curr_time");
-// timeHeading.textContent = "Practice Rooms Available for " + getTime() + ":";
 
 // get time of day in 15 min increments to get timeslot
 function getTime() {
@@ -63,3 +79,68 @@ function getTime() {
 
   return time;
 }
+
+// Gets day of week, Monday 0, Sunday 6
+function getAdjDay() {
+  let dateObj = new Date();
+  dayIdx = dateObj.getDay();
+  if (dayIdx == 0) {
+    dayIdx = 6;
+  } else {
+    dayIdx -= 1;
+  }
+  return dayIdx;
+}
+
+function buildTable(data, week) {
+  const table = document.getElementById("weekTable" + week);
+  const thead = table.querySelector("thead");
+  const tbody = table.querySelector("tbody");
+
+  // Clear table
+  thead.innerHTML = "";
+  tbody.innerHTML = "";
+
+  // Get all unique time slots from first room
+  const firstRoom = Object.keys(data)[0];
+  const timeSlots = Object.keys(data[firstRoom]);
+
+  // Build header row
+  const headerRow = document.createElement("tr");
+  headerRow.appendChild(document.createElement("th")); // empty corner
+  timeSlots.forEach((slot) => {
+    const th = document.createElement("th");
+    th.textContent = slot;
+    headerRow.appendChild(th);
+  });
+  thead.appendChild(headerRow);
+
+  // Build rows for each room
+  for (const [room, times] of Object.entries(data)) {
+    const tr = document.createElement("tr");
+    const tdRoom = document.createElement("td");
+    tdRoom.textContent = room;
+    tr.appendChild(tdRoom);
+
+    timeSlots.forEach((slot) => {
+      const td = document.createElement("td");
+      td.textContent = times[slot] || ""; // empty if no reservation
+      tr.appendChild(td);
+    });
+
+    tbody.appendChild(tr);
+  }
+}
+
+async function main() {
+  const currTime = getTime();
+  const data = await readSheet();
+  buildTable(data, 1);
+  buildTable(data, 2);
+  console.log(currTime);
+  console.log(data);
+}
+
+main();
+// const timeHeading = document.querySelector("#curr_time");
+// timeHeading.textContent = "Practice Rooms Available for " + getTime() + ":";
